@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from './Button';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 
 interface ScannerProps {
   onScan: (value: string) => void;
@@ -11,14 +10,10 @@ interface ScannerProps {
 export const Scanner: React.FC<ScannerProps> = ({ onScan, label = "Scan Device ID", placeholder = "Click to focus & scan..." }) => {
   const [inputValue, setInputValue] = useState('');
   const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  
-  // Unique ID for this scanner instance to support multiple on one page
-  const scannerId = useRef(`scanner-${Math.random().toString(36).substr(2, 9)}`).current;
-  const scannerRef = useRef<Html5Qrcode | null>(null);
 
-  // Auto-focus input on mount
+  // Auto-focus input on mount for handheld scanners
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -31,70 +26,36 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, label = "Scan Device I
     }
   };
 
-  // Real Camera Handling with Html5Qrcode
+  // Camera handling
   useEffect(() => {
+    let stream: MediaStream | null = null;
+
     if (isCameraOpen) {
-      setPermissionError(null);
-      
-      // Delay slightly to ensure DOM element exists
-      const timer = setTimeout(() => {
-        const html5QrCode = new Html5Qrcode(scannerId);
-        scannerRef.current = html5QrCode;
-
-        const config = { 
-          fps: 10, 
-          qrbox: { width: 250, height: 250 },
-          aspectRatio: 1.0
-        };
-        
-        // Support typical formats for Routers (Code 128) and others
-        const formats = [
-            Html5QrcodeSupportedFormats.QR_CODE,
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.UPC_A
-        ];
-
-        // Start scanning
-        html5QrCode.start(
-          { facingMode: "environment" }, 
-          config,
-          (decodedText) => {
-            // Success callback
-            console.log("Scanned:", decodedText);
-            onScan(decodedText);
-            // Stop scanning and close camera automatically on success
-            html5QrCode.stop().then(() => {
-                html5QrCode.clear();
-                setIsCameraOpen(false);
-            }).catch(err => console.error("Failed to stop scanner", err));
-          },
-          (errorMessage) => {
-            // parse error, ignore to avoid console spam
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(s => {
+          stream = s;
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
           }
-        ).catch(err => {
-          console.error("Error starting scanner", err);
-          setPermissionError("Could not access camera. Please ensure permissions are granted.");
-        });
-      }, 100);
-
-      return () => clearTimeout(timer);
-    } else {
-      // Cleanup if closed manually
-      if (scannerRef.current && scannerRef.current.isScanning) {
-        scannerRef.current.stop().then(() => scannerRef.current?.clear()).catch(console.error);
-        scannerRef.current = null;
-      }
+        })
+        .catch(err => console.error("Camera error:", err));
     }
 
-    // Unmount cleanup
     return () => {
-      if (scannerRef.current && scannerRef.current.isScanning) {
-        scannerRef.current.stop().then(() => scannerRef.current?.clear()).catch(console.error);
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [isCameraOpen, scannerId, onScan]);
+  }, [isCameraOpen]);
+
+  const simulateCameraScan = () => {
+    // In a real app, we would use a library like jsQR or zxing here
+    // For this demo, we simulate finding a code after a brief delay
+    const mockIds = ["DEV-002", "DEV-005", "DEV-008", "DEV-NEW-99"];
+    const randomId = mockIds[Math.floor(Math.random() * mockIds.length)];
+    onScan(randomId);
+    setIsCameraOpen(false);
+  };
 
   return (
     <div className="w-full space-y-4">
@@ -110,27 +71,24 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, label = "Scan Device I
       </div>
 
       {isCameraOpen ? (
-        <div className="relative bg-black rounded-lg overflow-hidden shadow-lg" style={{ minHeight: '300px' }}>
-          {/* The div where html5-qrcode renders the video */}
-          <div id={scannerId} className="w-full h-full"></div>
-          
-          {/* Custom Overlay for Visual Guide */}
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <div className="w-64 h-48 border-2 border-cyan-400/80 rounded-lg relative">
-                <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-cyan-400 -mt-1 -ml-1"></div>
-                <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-cyan-400 -mt-1 -mr-1"></div>
-                <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-cyan-400 -mb-1 -ml-1"></div>
-                <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-cyan-400 -mb-1 -mr-1"></div>
-                
-                <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-red-500/50"></div>
+        <div className="relative bg-black rounded-lg overflow-hidden aspect-video shadow-lg">
+          <video 
+            ref={videoRef} 
+            autoPlay 
+            playsInline 
+            className="w-full h-full object-cover opacity-80"
+          />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-64 h-32 border-2 border-cyan-400 rounded-lg animate-pulse bg-white/5 backdrop-blur-sm flex flex-col items-center justify-center text-white/80">
+              <span className="text-xs uppercase tracking-widest mb-2 font-medium">Align Barcode</span>
             </div>
           </div>
-
-          {permissionError && (
-             <div className="absolute inset-0 flex items-center justify-center bg-black/80 text-white p-6 text-center">
-                <p>{permissionError}</p>
-             </div>
-          )}
+          <div className="absolute bottom-4 left-0 right-0 flex justify-center">
+             {/* Simulation button because we don't have a real barcode lib loaded */}
+             <Button onClick={simulateCameraScan} variant="primary" type="button" className="bg-cyan-600 hover:bg-cyan-700 border-none">
+                [DEMO] Simulate Scan
+             </Button>
+          </div>
         </div>
       ) : (
         <form onSubmit={handleManualSubmit} className="flex gap-2">
