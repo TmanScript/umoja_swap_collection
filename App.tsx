@@ -43,7 +43,7 @@ const AppContent: React.FC<{
             <div className="flex">
               <Link to="/" className="flex-shrink-0 flex items-center gap-2 mr-6 hover:opacity-80 transition-opacity">
                 <img 
-                  src="https://umoja.network/wp-content/uploads/2023/10/Umoja-Logo-1.png" 
+                  src="https://thabisot33.github.io/logo/Umoja%20Logo%20Web_320x86_png.png" 
                   alt="Umoja Logo" 
                   className="h-10 w-auto"
                   onError={(e) => {
